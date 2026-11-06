@@ -91,10 +91,25 @@ def diff(
         console.print(f"[red]Model B not found: {for_terminal(path_b)}[/]")
         raise typer.Exit(1)
 
+    # Validate prompts path if passed
+    if prompts:
+        prompts_path = Path(prompts)
+        if not prompts_path.exists():
+            console.print(f"[red]Prompts file not found: {for_terminal(prompts_path)}[/]")
+            raise typer.Exit(1)
+        if not prompts_path.is_file():
+            console.print(f"[red]Prompts path is not a file: {for_terminal(prompts_path)}[/]")
+            raise typer.Exit(1)
+
     # Collect prompts
     prompt_list = _collect_prompts(prompts, prompt)
     if not prompt_list:
-        console.print("[red]No prompts provided. Use --prompts or --prompt.[/]")
+        if prompts:
+            console.print(
+                f"[red]No prompts found in file: {for_terminal(Path(prompts))}[/]"
+            )
+        else:
+            console.print("[red]No prompts provided. Use --prompts or --prompt.[/]")
         raise typer.Exit(1)
 
     # Detect device
@@ -190,8 +205,8 @@ def _collect_prompts(prompts_file: Optional[str], prompt_args: Optional[list[str
 
     if prompts_file:
         path = Path(prompts_file)
-        if path.exists():
-            with open(path, encoding="utf-8") as f:
+        if path.is_file():
+            with open(path, encoding="utf-8-sig") as f:
                 for line in f:
                     line = line.strip()
                     if not line:

@@ -70,6 +70,24 @@ class TestCollectPrompts:
         result = _collect_prompts(str(prompts_file), None)
         assert len(result) == 2
 
+    def test_collect_from_jsonl_with_utf8_bom(self, tmp_path):
+        """Should parse JSONL prompts even when file contains a UTF-8 BOM."""
+        from soup_cli.commands.diff import _collect_prompts
+
+        prompts_file = tmp_path / "prompts_bom.jsonl"
+        content = json.dumps({"prompt": "Prompt with BOM"}) + "\n"
+        prompts_file.write_text(content, encoding="utf-8-sig")
+
+        result = _collect_prompts(str(prompts_file), None)
+        assert result == ["Prompt with BOM"]
+
+    def test_collect_from_missing_file_or_directory(self, tmp_path):
+        """Should return empty list for missing file or directory."""
+        from soup_cli.commands.diff import _collect_prompts
+
+        assert _collect_prompts(str(tmp_path / "missing.jsonl"), None) == []
+        assert _collect_prompts(str(tmp_path), None) == []
+
 
 class TestComputeMetrics:
     """Test comparison metrics computation."""
@@ -196,3 +214,74 @@ class TestDiffCLI:
             "--model-b", str(tmp_path),
         ])
         assert result.exit_code != 0
+
+    def test_prompts_file_not_found(self, tmp_path):
+        """Should exit with code 1 and error message if prompts file does not exist."""
+        from typer.testing import CliRunner
+
+        from soup_cli.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, [
+            "diff",
+            "--model-a", str(tmp_path),
+            "--model-b", str(tmp_path),
+            "--prompts", str(tmp_path / "nonexistent.jsonl"),
+        ])
+        assert result.exit_code == 1
+        assert "Prompts file not found" in result.output
+
+    def test_prompts_file_not_found_with_prompt_option(self, tmp_path):
+        """Should not silently drop missing prompts file when --prompt is also provided."""
+        from typer.testing import CliRunner
+
+        from soup_cli.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, [
+            "diff",
+            "--model-a", str(tmp_path),
+            "--model-b", str(tmp_path),
+            "--prompts", str(tmp_path / "nonexistent.jsonl"),
+            "--prompt", "hello",
+        ])
+        assert result.exit_code == 1
+        assert "Prompts file not found" in result.output
+
+    def test_prompts_is_directory_error(self, tmp_path):
+        """Should exit with code 1 if prompts path is a directory."""
+        from typer.testing import CliRunner
+
+        from soup_cli.cli import app
+
+        prompts_dir = tmp_path / "prompts_dir"
+        prompts_dir.mkdir()
+
+        runner = CliRunner()
+        result = runner.invoke(app, [
+            "diff",
+            "--model-a", str(tmp_path),
+            "--model-b", str(tmp_path),
+            "--prompts", str(prompts_dir),
+        ])
+        assert result.exit_code == 1
+        assert "Prompts path is not a file" in result.output
+
+    def test_prompts_file_empty_error(self, tmp_path):
+        """Should report no prompts found in file when prompts file is empty."""
+        from typer.testing import CliRunner
+
+        from soup_cli.cli import app
+
+        empty_file = tmp_path / "empty.jsonl"
+        empty_file.write_text("", encoding="utf-8")
+
+        runner = CliRunner()
+        result = runner.invoke(app, [
+            "diff",
+            "--model-a", str(tmp_path),
+            "--model-b", str(tmp_path),
+            "--prompts", str(empty_file),
+        ])
+        assert result.exit_code == 1
+        assert "No prompts found in file" in result.output
